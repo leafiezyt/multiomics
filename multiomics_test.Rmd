@@ -1,0 +1,142 @@
+---
+title: "multiomics_test"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Summary  
+We would like to see if there's any interesting insights we can find through multi-omics integration approach.  
+
+
+```{r dataload}
+library(ggfortify)
+library(ggplot2)
+library(dplyr)
+library(factoextra)
+library(pvclust)
+load(file = "/Users/yetingzhang/Desktop/sema4/challenge_questions_analysis/Paper-Code-01May2018/Data/Data.Rda")
+#3head(featurepatients)
+featurepatients
+featuretimes
+#featureweeks
+
+df <- as.data.frame(InputData[[2]]) ## plasma luminex
+head(df)
+
+###quick EDA
+pca_1st <- prcomp(df[18:33,])
+#first_tri <- (row.names(df[17:33,]))
+
+fviz_eig(pca_1st)
+# the scree plot shows that the top 2 pcas already explained the majority of the variances in the data
+
+# plot pc1 vs pc2 using postpartum patients microbiome dataset
+fviz_pca_ind(pca_1st,
+             col.ind = "cos2", # Color by the quality of representation
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
+
+
+
+## Take a look into first trimestor, as that's one of the important stage.
+dis <- scale(df[18:33,], center = TRUE)
+#dist_mat <- dist(dis, method = 'euclidean')
+#hclust_avg <- hclust(dist_mat, method = 'average')
+#plot(hclust_avg)
+
+##use pvclust to get a confidence values
+pv <- pvclust(t(dis), nboot=1000)
+plot(pv, cex=0.8, cex.pv=0.7)
+
+##G010_1, G003_1,G024_1, G002_1, G005_1 as one cluster and rest as the second cluster
+df2 <- df[18:33,]
+rownames(df2)
+df2$clus <- c(1,1,0,1,0,0,0,1,0,0,0,0,0,0,0,1)
+```
+
+## Look into the patients divided into subgroups
+
+```{r buildModel}
+## we can also visualize the plasma readings for each
+for (i in 1: (ncol(df2)-1)){
+  hist(df2[,i], breaks = 10, main = names(df2)[i])
+}
+
+## take a look at correlation
+library(corrplot)
+correlations <- cor(df2)
+corrplot(correlations, method="circle")
+
+## build a logistic regression model using df2 dataframe
+for (i in 1:(ncol(df2)-1)){
+  test <- cor.test(df2[,i], df2$clus)
+  if (test$p.value <=0.05){
+    print(colnames(df2)[i])
+    print(test)
+  }
+}
+
+## BDNF and VCAM1 strongest signal
+
+##head(df2)
+glm.fit <- glm(clus ~ df2$`plasma-TGFA` + df2$`plasma-VCAM1` + df2$`plasma-BDNF` + df2$`plasma-MCP1` + df2$`plasma-MIP1B` , data = df2, family = binomial)
+summary(glm.fit)
+
+glm.fit <- glm(clus ~ df2$`plasma-TGFA` , data = df2, family = binomial)
+summary(glm.fit)
+
+glm.fit <- glm(clus ~ df2$`plasma-VCAM1` , data = df2, family = binomial)
+summary(glm.fit)
+
+glm.fit <- glm(clus ~ df2$`plasma-BDNF` , data = df2, family = binomial)
+summary(glm.fit)
+
+glm.fit <- glm(clus ~ df2$`plasma-MCP1` , data = df2, family = binomial)
+summary(glm.fit)
+
+glm.fit <- glm(clus ~ df2$`plasma-MIP1B` , data = df2, family = binomial)
+summary(glm.fit)
+
+##BDNF strongest p-values associated with the subgroup
+```
+
+## Use mixOmics to dig in more interesting insights  
+
+```{r}
+library(mixOmics)
+## look into immune system
+df_im <- as.data.frame(InputData[[5]]) ## immune_system
+head(df_im)
+
+dis_im <- scale(df_im[18:33,], center = TRUE)
+
+##use pvclust to get a confidence values
+pv_im <- pvclust(t(dis_im), nboot=1000)
+plot(pv_im, cex=0.8, cex.pv=0.7)
+
+X <- df2
+Y <- df_im[18:33,]
+shrink <- rcc(X, Y, ncomp = 3, method = "shrinkage")
+plot(shrink, scree.type = "barplot")
+
+grid1 <- seq(0.05, 0.2, length = 5) 
+grid2 <- seq(0.05, 0.2, length = 5)
+
+cv <- tune.rcc(X, Y, grid1 = grid1, grid2 = grid2, validation = "loo")
+
+test.rcc <- rcc(X,Y, ncomp = 6,  lambda1 = cv$opt.lambda1, 
+              lambda2 = cv$opt.lambda2)
+
+plotVar(test.rcc, comp = 3:4, cutoff = 0.6, var.names = c(TRUE, TRUE),
+        cex = c(2, 2), title = 'Nutrimouse, rCCA comp 3 - 4')
+
+plotVar(test.rcc, comp = 4:5, cutoff = 0.5, var.names = c(TRUE, TRUE),
+        cex = c(2, 2), title = 'Nutrimouse, rCCA comp 4 - 5')
+```
+
