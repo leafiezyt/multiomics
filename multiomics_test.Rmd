@@ -19,7 +19,7 @@ library(ggplot2)
 library(dplyr)
 library(factoextra)
 library(pvclust)
-load(file = "/Users/yetingzhang/Desktop/sema4/challenge_questions_analysis/Paper-Code-01May2018/Data/Data.Rda")
+load(file = "~/challenge_questions_analysis/Paper-Code-01May2018/Data/Data.Rda")
 #3head(featurepatients)
 featurepatients
 featuretimes
